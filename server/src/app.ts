@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import userRoutes from "./routes/user.routes"
 
 const app = express();
 app.use(helmet());
@@ -15,5 +16,7 @@ app.get("/api/health", (_req, res) => {
     message: "API is running"
   });
 });
+
+app.use("/api",userRoutes);
 
 export default app;
