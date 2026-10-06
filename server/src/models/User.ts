@@ -4,6 +4,7 @@ export interface IUser extends Document {
   username: string;
   email: string;
   passwordHash: string;
+  activeSessionId: string | null;
 }
 
 const userSchema = new Schema<IUser>(
@@ -25,6 +26,12 @@ const userSchema = new Schema<IUser>(
     passwordHash: {
       type: String,
       required: true,
+      select: false
+    },
+    activeSessionId: {
+      type: String,
+      default: null,
+      select: false,
     },
   },
   {
