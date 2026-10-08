@@ -6,13 +6,47 @@ import {
 } from "../services/auth.service";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { User } from "../models/user";
+import { z } from "zod";
+
+const registerSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username cannot exceed 30 characters"),
+
+  email: z
+    .string()
+    .trim()
+    .email("Please provide a valid email address")
+    .transform((email) => email.toLowerCase()),
+
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password is too long"),
+}).strict();
 
 export const register = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const { username, email, password } = req.body;
+
+    const validation = registerSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: validation.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message,
+        })),
+      });
+    }
+
+    const { username, email, password } = validation.data;
 
     const user = await registerUser(
       username,
