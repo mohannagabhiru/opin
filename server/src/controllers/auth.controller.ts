@@ -77,7 +77,7 @@ export const login = async (
 ) => {
   try {
     const { email, password } = req.body;
-
+    console.log("in login", email, password);
     const { user, accessToken } = await loginUser(
       email,
       password

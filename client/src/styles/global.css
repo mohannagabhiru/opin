@@ -1,0 +1,62 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #222;
+  background: #f7f7f7;
+}
+
+main,
+header,
+.auth-layout {
+  padding: 1rem;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+a {
+  color: #2457c5;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+  padding: 0.6rem;
+}
+
+textarea {
+  min-height: 8rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+article {
+  padding: 1rem;
+  margin: 1rem 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+}
