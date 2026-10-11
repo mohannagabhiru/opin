@@ -9,15 +9,12 @@ import GuestRoute from "../features/auth/components/GuestRoute";
 
 import LoginPage from "../features/auth/pages/LoginPage";
 import RegisterPage from "../features/auth/pages/RegisterPage";
+import FeedPage from "../features/feed/pages/Feed";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <HomePage />,
-  },
-  {
-    path: "/login",
-    element: <LoginPage />,
   },
   {
     element: <GuestRoute />,
@@ -31,4 +28,18 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  {
+  element: <ProtectedRoute />,
+  children: [
+    {
+      element: <AppLayout />,
+      children: [
+        {
+          path: "feed",
+          element: <FeedPage />,
+        },
+      ],
+    },
+  ],
+},
 ])
