@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-   "server": "cd server && npm run dev",
-  "client": "cd client && npm run dev",
-  "dev": "concurrently \"npm run server\" \"npm run client\""
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "repository": {
     "type": "git",
@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/mohannagabhiru/opin/issues"
   },
-  "homepage": "https://github.com/mohannagabhiru/opin#readme"
+  "homepage": "https://github.com/mohannagabhiru/opin#readme",
+  "dependencies": {
+    "express-rate-limit": "^8.7.1"
+  }
 }
