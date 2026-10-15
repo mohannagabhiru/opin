@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/mohannagabhiru/opin#readme",
   "dependencies": {
+    "concurrently": "^10.0.6",
     "express-rate-limit": "^8.7.1"
   }
 }

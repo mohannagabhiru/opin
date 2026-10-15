@@ -1,14 +1,6 @@
-
 import { Types } from "mongoose";
-
 import { OpinionModel } from "../models/Opinion";
-import { verifyLocationToken } from "../utils/location-selection-token";
-
-interface CreateOpinionArgs {
-  authorId: string;
-  text: string;
-  selectionToken: string;
-}
+import type { CreateOpinionInput } from "../validators/opinion.validator";
 
 interface FeedOptions {
   limit: number;
@@ -25,42 +17,28 @@ export class OpinionServiceError extends Error {
   constructor(
     public readonly code:
       | "INVALID_AUTHOR_ID"
-      | "INVALID_LOCATION_SELECTION"
-      | "INVALID_CURSOR"
+      | "INVALID_CURSOR",
   ) {
     super(code);
     this.name = "OpinionServiceError";
   }
 }
 
-/**
- * Creates an opinion associated with a verified location
- * returned by the location search endpoint.
- */
 export async function createOpinion(
-  input: CreateOpinionArgs
+  input: CreateOpinionInput & { authorId: string },
 ) {
   if (!Types.ObjectId.isValid(input.authorId)) {
     throw new OpinionServiceError("INVALID_AUTHOR_ID");
   }
 
-  const text = input.text.trim();
+  const text = input.content.text.trim();
 
   if (!text || text.length > 5000) {
     throw new Error("INVALID_OPINION_TEXT");
   }
 
-  const selectedLocation = verifyLocationToken(
-    input.selectionToken
-  );
-
-  if (!selectedLocation) {
-    throw new OpinionServiceError(
-      "INVALID_LOCATION_SELECTION"
-    );
-  }
-
-  const displayName = selectedLocation.displayName
+  const location = input.location;
+  const displayName = location.displayName
     .trim()
     .replace(/\s+/g, " ");
 
@@ -78,17 +56,17 @@ export async function createOpinion(
     location: {
       displayName,
       normalizedName,
-      countryCode: selectedLocation.countryCode,
-      region: selectedLocation.region,
-      city: selectedLocation.city,
-      osmType: selectedLocation.osmType,
-      osmId: selectedLocation.osmId,
+      countryCode: location.countryCode,
+      region: location.region,
+      city: location.city,
+      osmType: location.osmType,
+      osmId: location.osmId,
 
       geo: {
         type: "Point",
         coordinates: [
-          selectedLocation.longitude,
-          selectedLocation.latitude,
+          location.longitude,
+          location.latitude,
         ],
       },
     },
@@ -99,9 +77,6 @@ export async function createOpinion(
   return opinion;
 }
 
-/**
- * Encodes the last opinion in a page as an opaque cursor.
- */
 function encodeCursor(opinion: {
   createdAt: Date;
   _id: Types.ObjectId;
@@ -113,19 +88,16 @@ function encodeCursor(opinion: {
 
   return Buffer.from(
     JSON.stringify(cursor),
-    "utf8"
+    "utf8",
   ).toString("base64url");
 }
 
-/**
- * Decodes and validates a pagination cursor.
- */
 function decodeCursor(
-  cursor: string
+  cursor: string,
 ): FeedCursor | null {
   try {
     const decoded: unknown = JSON.parse(
-      Buffer.from(cursor, "base64url").toString("utf8")
+      Buffer.from(cursor, "base64url").toString("utf8"),
     );
 
     if (
@@ -135,10 +107,7 @@ function decodeCursor(
       return null;
     }
 
-    const candidate = decoded as Record<
-      string,
-      unknown
-    >;
+    const candidate = decoded as Record<string, unknown>;
 
     if (
       typeof candidate.createdAt !== "string" ||
@@ -172,20 +141,10 @@ function decodeCursor(
   }
 }
 
-/**
- * Retrieves a paginated feed of published opinions.
- *
- * When authorId is supplied, returns only that author's
- * published opinions.
- */
 async function getFeed(options: FeedOptions) {
-  const limit = options.limit;
+  const { limit } = options;
 
-  if (
-    !Number.isInteger(limit) ||
-    limit < 1 ||
-    limit > 50
-  ) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
     throw new Error("INVALID_FEED_LIMIT");
   }
 
@@ -211,30 +170,20 @@ async function getFeed(options: FeedOptions) {
     const cursorDate = new Date(cursor.createdAt);
     const cursorId = new Types.ObjectId(cursor.id);
 
-    // Stable ordering for opinions sharing a timestamp.
     filter.$or = [
-      {
-        createdAt: {
-          $lt: cursorDate,
-        },
-      },
+      { createdAt: { $lt: cursorDate } },
       {
         createdAt: cursorDate,
-        _id: {
-          $lt: cursorId,
-        },
+        _id: { $lt: cursorId },
       },
     ];
   }
 
   const documents = await OpinionModel.find(filter)
-    .sort({
-      createdAt: -1,
-      _id: -1,
-    })
+    .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .select(
-      "_id authorId content location status createdAt updatedAt"
+      "_id authorId content location status createdAt updatedAt",
     )
     .lean()
     .exec();
@@ -273,9 +222,6 @@ async function getFeed(options: FeedOptions) {
   };
 }
 
-/**
- * Retrieves the public feed.
- */
 export function getPublicOpinionFeed(options: {
   limit: number;
   cursor?: string;
@@ -283,17 +229,10 @@ export function getPublicOpinionFeed(options: {
   return getFeed(options);
 }
 
-/**
- * Retrieves the authenticated user's published opinions.
- */
 export function getMyOpinions(options: {
   authorId: string;
   limit: number;
   cursor?: string;
 }) {
-  return getFeed({
-    authorId: options.authorId,
-    limit: options.limit,
-    cursor: options.cursor,
-  });
+  return getFeed(options);
 }

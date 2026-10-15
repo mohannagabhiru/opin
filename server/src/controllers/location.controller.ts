@@ -7,6 +7,7 @@ export async function searchLocationsController(
   req: Request,
   res: Response
 ): Promise<void> {
+
   const parsed = locationSearchSchema.safeParse(req.query);
 
   if (!parsed.success) {

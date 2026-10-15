@@ -2,7 +2,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 
-import requireAuth from "../middleware/requireAuth";
+import {requireAuth} from "../middleware/auth.middleware";
 import {
   createOpinionController,
   getOpinionFeedController,

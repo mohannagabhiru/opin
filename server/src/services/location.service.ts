@@ -1,5 +1,15 @@
+const NOMINATIM_URL =
+  "https://nominatim.openstreetmap.org/search";
 
-import { createLocationToken } from "../utils/location-selection-token";
+interface NominatimAddress {
+  country_code?: string;
+  state?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+  municipality?: string;
+  county?: string;
+}
 
 interface NominatimResult {
   place_id: number;
@@ -8,28 +18,23 @@ interface NominatimResult {
   display_name: string;
   lat: string;
   lon: string;
-  address?: {
-    country_code?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    municipality?: string;
-    state?: string;
-  };
+  address?: NominatimAddress;
 }
 
 export interface LocationSearchResult {
-  selectionToken: string;
   displayName: string;
   latitude: number;
   longitude: number;
-  city?: string;
-  region?: string;
   countryCode?: string;
+  region?: string;
+  city?: string;
+  osmType: string;
+  osmId: string;
   attribution: string;
 }
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_TTL_MS = 20 * 60 * 1000;
+const MIN_REQUEST_INTERVAL_MS = 1100;
 
 const cache = new Map<
   string,
@@ -39,152 +44,112 @@ const cache = new Map<
   }
 >();
 
-let requestQueue: Promise<unknown> = Promise.resolve();
-let lastRequestAt = 0;
+let nextRequestTime = 0;
+let requestQueue: Promise<void> = Promise.resolve();
 
-function sleep(ms: number): Promise<void> {
+function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function queueNominatimRequest<T>(
-  request: () => Promise<T>
-): Promise<T> {
+async function fetchWithRateLimit(
+  url: string,
+): Promise<Response> {
   const task = requestQueue.then(async () => {
-    const waitMs = Math.max(
-      0,
-      1100 - (Date.now() - lastRequestAt)
-    );
+    const now = Date.now();
 
-    if (waitMs > 0) {
-      await sleep(waitMs);
+    if (now < nextRequestTime) {
+      await wait(nextRequestTime - now);
     }
 
-    lastRequestAt = Date.now();
-    return request();
+    nextRequestTime =
+      Date.now() + MIN_REQUEST_INTERVAL_MS;
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": `${process.env.NOMINATIM_USER_AGENT} (${process.env.OPINION_PLATFORM_CONTACT})`,
+        "Accept-Language": "en",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    return response;
   });
 
+  // Keep the queue operational even if a request fails.
   requestQueue = task.then(
     () => undefined,
-    () => undefined
+    () => undefined,
   );
 
-  return task as Promise<T>;
-}
-
-async function fetchNominatim(
-  query: string
-): Promise<NominatimResult[]> {
-  const userAgent = process.env.NOMINATIM_USER_AGENT;
-  const contact = process.env.OPINION_PLATFORM_CONTACT;
-
-  if (!userAgent || !contact) {
-    throw new Error(
-      "Nominatim environment variables are missing"
-    );
-  }
-
-  const params = new URLSearchParams({
-    format: "jsonv2",
-    q: query,
-    countrycodes: "in",
-    limit: "5",
-    addressdetails: "1",
-    email: contact,
-  });
-
-  const response = await queueNominatimRequest(() =>
-    fetch(
-      `https://nominatim.openstreetmap.org/search?${params}`,
-      {
-        headers: {
-          "User-Agent": `${userAgent} (${contact})`,
-          "Accept-Language": "en",
-        },
-        signal: AbortSignal.timeout(8000),
-      }
-    )
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Nominatim returned HTTP ${response.status}`
-    );
-  }
-
-  return (await response.json()) as NominatimResult[];
+  return task;
 }
 
 export async function searchLocations(
-  rawQuery: string
+  query: string,
 ): Promise<LocationSearchResult[]> {
-  const query = rawQuery.trim().replace(/\s+/g, " ");
-  const cacheKey = query.toLowerCase();
-  const cached = cache.get(cacheKey);
+  const normalizedQuery = query.trim().replace(/\s+/g, " ");
+
+  const cached = cache.get(normalizedQuery);
 
   if (cached && cached.expiresAt > Date.now()) {
     return cached.results;
   }
 
-  const results = await fetchNominatim(query);
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    q: normalizedQuery,
+    countrycodes: "in",
+    limit: "5",
+    addressdetails: "1",
+  });
 
-  const mapped: LocationSearchResult[] = results
+  const response = await fetchWithRateLimit(
+    `${NOMINATIM_URL}?${params.toString()}`,
+  );
+
+  if (!response.ok) {
+    throw new Error("LOCATION_PROVIDER_UNAVAILABLE");
+  }
+
+  const data: NominatimResult[] = await response.json();
+
+  const results: LocationSearchResult[] = data
     .map((item) => {
       const latitude = Number(item.lat);
       const longitude = Number(item.lon);
-
-      if (
-        !Number.isFinite(latitude) ||
-        !Number.isFinite(longitude) ||
-        latitude < -90 ||
-        latitude > 90 ||
-        longitude < -180 ||
-        longitude > 180
-      ) {
-        return null;
-      }
-
       const address = item.address ?? {};
-      const displayName = item.display_name;
-
-      const selectionToken = createLocationToken({
-        displayName,
-        latitude,
-        longitude,
-        osmType: item.osm_type,
-        osmId: String(item.osm_id),
-        countryCode: address.country_code?.toUpperCase(),
-        city:
-          address.city ??
-          address.town ??
-          address.village ??
-          address.municipality,
-        region: address.state,
-      });
 
       return {
-        selectionToken,
-        displayName,
+        displayName: item.display_name,
         latitude,
         longitude,
+        countryCode: address.country_code?.toUpperCase(),
+        region: address.state,
         city:
           address.city ??
           address.town ??
           address.village ??
-          address.municipality,
-        region: address.state,
-        countryCode: address.country_code?.toUpperCase(),
+          address.municipality ??
+          address.county,
+        osmType: item.osm_type,
+        osmId: String(item.osm_id),
         attribution: "© OpenStreetMap contributors",
       };
     })
     .filter(
-      (item): item is LocationSearchResult =>
-        item !== null
+      (item) =>
+        Number.isFinite(item.latitude) &&
+        Number.isFinite(item.longitude) &&
+        item.latitude >= -90 &&
+        item.latitude <= 90 &&
+        item.longitude >= -180 &&
+        item.longitude <= 180,
     );
 
-  cache.set(cacheKey, {
-    results: mapped,
+  cache.set(normalizedQuery, {
+    results,
     expiresAt: Date.now() + CACHE_TTL_MS,
   });
 
-  return mapped;
+  return results;
 }

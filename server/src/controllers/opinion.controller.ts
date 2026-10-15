@@ -52,10 +52,10 @@ export async function createOpinionController(
 
   try {
     const opinion = await createOpinion({
-      authorId: userId,
-      text: parsed.data.content.text,
-      selectionToken: parsed.data.location.selectionToken,
-    });
+  authorId: userId,
+  content: parsed.data.content,
+  location: parsed.data.location,
+});
 
     res.status(201).json({
       opinion: {
